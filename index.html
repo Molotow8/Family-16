@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Familien- & Betreuungsplan Master</title>
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-dark: #1e293b;
+      --header-dark: #1e1b4b;
+      --text-light: #f8fafc;
+      --border-color: #cbd5e1;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 12px;
+      background-color: #f1f5f9;
+      color: #334155;
+      /* Verhindert unabsichtliches Text-Markieren beim Ziehen auf dem Handy/PC */
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .top-bar {
+      background: #0f172a;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .top-title { display: flex; align-items: center; gap: 12px; }
+    .top-title h1 { margin: 0; font-size: 1.25rem; font-weight: 700; }
+    .nav-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .week-nav { display: flex; align-items: center; gap: 8px; background: #1e293b; padding: 6px 12px; border-radius: 8px; }
+    .week-nav select, .week-nav button { background: #334155; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    .week-nav button:hover { background: #475569; }
+    
+    .btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-blue { background: #3b82f6; color: white; }
+    .btn-purple { background: #6366f1; color: white; }
+    .btn-green { background: #10b981; color: white; }
+    .btn-dark { background: #334155; color: white; }
+    .btn-red { background: #ef4444; color: white; }
+    
+    .info-banner {
+      background: #fef9c3;
+      border: 1px solid #fde047;
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+      color: #854d0e;
+    }
+    .info-banner strong { display: block; margin-bottom: 4px; color: #713f12; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .stat-card {
+      background: white;
+      padding: 8px 12px;
+      border-radius: 10px;
+      text-align: center;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .stat-title { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+    .stat-value { font-size: 1.1rem; font-weight: 800; }
+
+    .table-container {
+      overflow-x: auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      border: 1px solid #cbd5e1;
+      margin-bottom: 20px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.75rem; white-space: nowrap; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: center; }
+    th.kw-header { background: #1e1b4b; color: white; font-weight: 700; font-size: 0.85rem; }
+    th.day-header { background: #f8fafc; color: #1e293b; font-size: 0.75rem; line-height: 1.3; }
+    td.time-col { background: #f1f5f9; font-weight: 700; color: #475569; width: 110px; text-align: left; padding-left: 10px; }
+    
+    .cell-editable { cursor: pointer; min-height: 26px; min-width: 60px; transition: background 0.15s; }
+    .cell-editable:hover { outline: 2px solid #3b82f6; background: #e0f2fe; }
+    .cell-editable.selected { outline: 3px solid #6366f1; background: #c7d2fe !important; }
+    
+    /* Personen & Status Farben */
+    .bg-mutter { background-color: #0284c7 !important; color: white; font-weight: bold; }
+    .bg-vater { background-color: #16a34a !important; color: white; font-weight: bold; }
+    .bg-schule { background-color: #dc2626 !important; color: white; font-weight: bold; }
+    .bg-grosi { background-color: #9333ea !important; color: white; font-weight: bold; }
+    .bg-dofrei { background-color: #eab308 !important; color: #713f12; font-weight: bold; }
+    .bg-mifrei { background-color: #a855f7 !important; color: white; font-weight: bold; }
+    .bg-frkurz { background-color: #84cc16 !important; color: #365314; font-weight: bold; }
+    .bg-bus { background-color: #ffedd5 !important; color: #9a3412; font-weight: 500; }
+    .bg-feuerwehr { background-color: #fee2e2 !important; color: #991b1b; font-weight: bold; }
+    .bg-schulferien { background-color: #fef3c7 !important; color: #92400e; font-weight: bold; }
+
+    /* Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+    .modal-content { background: white; padding: 20px; border-radius: 12px; width: 440px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+    .modal select, .modal input { width: 100%; padding: 8px; margin: 6px 0 12px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 0.9rem; box-sizing: border-box; }
+  </style>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBybBx-z-eA0-VAbQ11EZXzAxl_XPHShr4",
+      authDomain: "familienplaner-4.firebaseapp.com",
+      databaseURL: "https://familienplaner-4-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "familienplaner-4",
+      storageBucket: "familienplaner-4.firebasestorage.app",
+      messagingSenderId: "496205326855",
+      appId: "1:496205326855:web:b4914ef9c7005d332918a2"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentYear = 2026;
+    let currentKW = 23;
+    let isSyncing = false;
+    let isMouseDown = false;
+
+    const thurgauFerien = {
+      2026: [
+        { name: "Sportferien TG", start: "2026-02-09", end: "2026-02-20" },
+        { name: "Frühlingsferien TG", start: "2026-04-06", end: "2026-04-17" },
+        { name: "Sommerferien TG", start: "2026-07-06", end: "2026-08-07" },
+        { name: "Herbstferien TG", start: "2026-10-05", end: "2026-10-16" },
+        { name: "Weihnachtsferien TG", start: "2026-12-21", end: "2027-01-01" }
+      ],
+      2027: [
+        { name: "Sportferien TG", start: "2027-02-08", end: "2027-02-19" },
+        { name: "Frühlingsferien TG", start: "2027-03-29", end: "2027-04-09" },
+        { name: "Sommerferien TG", start: "2027-07-05", end: "2027-08-06" },
+        { name: "Herbstferien TG", start: "2027-10-04", end: "2027-10-15" },
+        { name: "Weihnachtsferien TG", start: "2027-12-24", end: "2028-01-05" }
+      ]
+    };
+
+    function getDbPath() {
+      return `jahre/${currentYear}/kw_${currentKW}`;
+    }
+
+    function getAutomationsPath() {
+      return `jahre/automationen`;
+    }
+
+    function getDateOfISOWeek(w, y) {
+      const simple = new Date(y, 0, 1 + (w - 1) * 7);
+      const dow = simple.getDay();
+      const ISOweekStart = simple;
+      if (dow <= 4)
+        ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+      else
+        ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+      return ISOweekStart;
+    }
+
+    function updateDayHeadersAndFerien() {
+      const startOfWeek = getDateOfISOWeek(currentKW, currentYear);
+      const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+      const weekDates = [];
+      
+      for (let i = 0; i < 14; i++) {
+        const d = new Date(startOfWeek);
+        d.setDate(startOfWeek.getDate() + i);
+        weekDates.push(new Date(d));
+        
+        const dayStr = String(d.getDate()).padStart(2, '0');
+        const monthStr = String(d.getMonth() + 1).padStart(2, '0');
+        const dayName = dayNames[i % 7];
+        
+        const thElement = document.getElementById(`day-${i}`);
+        if(thElement) {
+          thElement.innerHTML = `${dayStr}.${monthStr}.<br><small style="font-weight:bold; color:#1e293b;">${dayName}</small>`;
+        }
+      }
+      
+      document.getElementById('displayKW').innerText = `KW ${currentKW} & KW ${currentKW+1} | ${currentYear}`;
+      document.getElementById('th-kw1').innerText = `KW ${currentKW}`;
+      document.getElementById('th-kw2').innerText = `KW ${currentKW + 1}`;
+
+      applyThurgauFerien(weekDates);
+    }
+
+    function applyThurgauFerien(weekDates) {
+      const ferienRowCells = document.querySelectorAll('#row-schulferien td.cell-editable');
+      const yearsToCheck = [currentYear, currentYear + 1];
+      let ferienTageCount = 0;
+
+      weekDates.forEach((dateObj, index) => {
+        if(index >= ferienRowCells.length) return;
+        const cell = ferienRowCells[index];
+        let matchedFerienName = "";
+
+        yearsToCheck.forEach(y => {
+          if(thurgauFerien[y]) {
+            thurgauFerien[y].forEach(f => {
+              const start = new Date(f.start);
+              const end = new Date(f.end);
+              if(dateObj >= start && dateObj <= end) {
+                matchedFerienName = f.name;
+              }
+            });
+          }
+        });
+
+        if(matchedFerienName) {
+          cell.innerText = matchedFerienName;
+          cell.className = 'cell-editable bg-schulferien';
+          ferienTageCount++;
+        } else if(cell.innerText.includes("TG")) {
+          cell.innerText = "";
+          cell.className = 'cell-editable';
+        }
+      });
+      document.getElementById('stat-schulferien').innerText = ferienTageCount + ' Tage';
+    }
+
+    function saveToFirebase() {
+      if(isSyncing) return;
+      const data = [];
+      document.querySelectorAll('#planTable tbody tr').forEach((row) => {
+        if(row.id === 'row-schulferien') return;
+        row.querySelectorAll('.cell-editable').forEach(c => {
+          data.push({ text: c.innerText, class: c.className });
+        });
+      });
+      db.ref(getDbPath()).set(data);
+    }
+
+    function loadWeekData() {
+      isSyncing = true;
+      updateDayHeadersAndFerien();
+      document.getElementById('yearSelect').value = currentYear;
+      document.getElementById('kwSelect').value = currentKW;
+
+      db.ref(getDbPath()).once('value', (snapshot) => {
+        const data = snapshot.val();
+        const cells = document.querySelectorAll('#planTable tbody tr:not(#row-schulferien) .cell-editable');
+        
+        cells.forEach((cell, index) => {
+          if (data && data[index]) {
+            cell.innerText = data[index].text;
+            cell.className = data[index].class || 'cell-editable';
+          } else {
+            cell.innerText = '';
+            cell.className = 'cell-editable';
+          }
+        });
+        
+        applyAutomationsAndRefresh();
+        isSyncing = false;
+      });
+
+      db.ref(getDbPath()).on('value', (snapshot) => {
+        if(isSyncing) return;
+        const data = snapshot.val();
+        if (data) {
+          isSyncing = true;
+          const cells = document.querySelectorAll('#planTable tbody tr:not(#row-schulferien) .cell-editable');
+          data.forEach((item, index) => {
+            if (cells[index]) {
+              cells[index].innerText = item.text;
+              cells[index].className = item.class || 'cell-editable';
+            }
+          });
+          applyAutomationsAndRefresh();
+          isSyncing = false;
+        }
+      });
+    }
+
+    function applyAutomationsAndRefresh() {
+      db.ref(getAutomationsPath()).once('value', (snapshot) => {
+        const rules = snapshot.val();
+        if(rules) {
+          const startOfWeek = getDateOfISOWeek(currentKW, currentYear);
+          Object.values(rules).forEach(rule => {
+            checkAndApplyRule(rule, startOfWeek);
+          });
+        }
+        recalculateStats();
+      });
+    }
+
+    function checkAndApplyRule(rule, startOfWeek) {
+      const ruleStart = new Date(rule.startDate);
+      const ruleEnd = rule.endDate ? new Date(rule.endDate) : null;
+      const interval = parseInt(rule.interval) || 1;
+
+      for(let i = 0; i < 14; i++) {
+        const targetDate = new Date(startOfWeek);
+        targetDate.setDate(startOfWeek.getDate() + i);
+        
+        if(targetDate < ruleStart) continue;
+        if(ruleEnd && targetDate > ruleEnd) continue;
+
+        const dayOfWeek = targetDate.getDay();
+        if(rule.days.includes(dayOfWeek)) {
+          const diffTime = Math.abs(targetDate - ruleStart);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const diffWeeks = Math.floor(diffDays / 7);
+          
+          if(diffWeeks % interval === 0) {
+            setCellByTimeAndDay(rule.timeRowId, i, rule.text, rule.bgClass);
+          }
+        }
+      }
+    }
+
+    function setCellByTimeAndDay(rowId, colIndex, text, bgClass) {
+      const row = document.getElementById(rowId);
+      if(row) {
+        const cell = row.querySelector(`[data-col="${colIndex}"]`);
+        if(cell && !cell.innerText) {
+          cell.innerText = text;
+          cell.className = 'cell-editable ' + bgClass;
+        }
+      }
+    }
+
+    function changeWeek(offset) {
+      currentKW += offset;
+      if(currentKW > 51) { currentKW = 1; currentYear++; }
+      if(currentKW < 1) { currentKW = 51; currentYear--; }
+      db.ref(getDbPath()).off();
+      loadWeekData();
+    }
+
+    function onDropdownChange() {
+      currentYear = parseInt(document.getElementById('yearSelect').value);
+      currentKW = parseInt(document.getElementById('kwSelect').value);
+      db.ref(getDbPath()).off();
+      loadWeekData();
+    }
+
+    // Maus- & Touch-Steuerung für Mehrfachauswahl (Drag & Drop)
+    document.addEventListener("mousedown", (e) => {
+      if (e.target.classList.contains('cell-editable')) {
+        isMouseDown = true;
+        e.target.classList.toggle('selected');
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener("mouseover", (e) => {
+      if (isMouseDown && e.target.classList.contains('cell-editable')) {
+        e.target.classList.add('selected');
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      isMouseDown = false;
+    });
+
+    // Touch-Unterstützung für das Handy (Wischen über Zellen)
+    document.addEventListener("touchstart", (e) => {
+      const target = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+      if (target && target.classList.contains('cell-editable')) {
+        isMouseDown = true;
+        target.classList.toggle('selected');
+      }
+    }, {passive: true});
+
+    document.addEventListener("touchmove", (e) => {
+      if (!isMouseDown) return;
+      const target = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+      if (target && target.classList.contains('cell-editable')) {
+        target.classList.add('selected');
+      }
+    }, {passive: true});
+
+    document.addEventListener("touchend", () => {
+      isMouseDown = false;
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadWeekData();
+    });
+  </script>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <div class="top-bar">
+    <div class="top-title">
+      <div style="background:#3b82f6; padding:8px; border-radius:8px; color:white;">📅</div>
+      <div>
+        <h1>Familien- & Betreuungsplan Master</h1>
+        <span id="displayKW">KW 23 & KW 24 | 2026</span>
+      </div>
+    </div>
+    
+    <div class="week-nav">
+      <button onclick="changeWeek(-2)">◀ Vorherige</button>
+      <select id="kwSelect" onchange="onDropdownChange()">
+        <script>
+          for(let i=1; i<=51; i+=2) {
+            document.write(`<option value="${i}">KW ${i} & ${i+1}</option>`);
+          }
+        </script>
+      </select>
+      <select id="yearSelect" onchange="onDropdownChange()">
+        <option value="2026">2026</option>
+        <option value="2027">2027</option>
+        <option value="2028">2028</option>
+      </select>
+      <button onclick="changeWeek(2)">Nächste ▶</button>
+    </div>
+
+    <div class="nav-controls">
+      <button class="btn btn-purple" onclick="openAutomationModal()">⚡ Automatismen</button>
+      <button class="btn btn-green" onclick="window.print()">🖨️ Drucken</button>
+      <button class="btn btn-dark" onclick="exportData()">📥 Sichern</button>
+      <button class="btn btn-dark" onclick="document.getElementById('importFile').click()">📂 Laden</button>
+      <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+    </div>
+  </div>
+
+  <!-- Info Header -->
+  <div class="info-banner">
+    <strong>🚌 Schulbus Valeria von/zu Ermatingen:</strong>
+    Tel. Vater Simon: 077 404 44 77 / 079 399 40 12 &nbsp;|&nbsp; Grosi Rös: 078 675 83 80 &nbsp;|&nbsp; Grossvater Dani: 079 833 49 16 &nbsp;|&nbsp; Mutter Marcela: 076 403 99 86
+  </div>
+
+  <!-- Stat-Karten -->
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-title">MAMI BETREUUNG</div><div class="stat-value" style="color:#0284c7" id="stat-mami-pct">0.0%</div></div>
+    <div class="stat-card"><div class="stat-title">PAPI BETREUUNG</div><div class="stat-value" style="color:#16a34a" id="stat-papi-pct">0.0%</div></div>
+    <div class="stat-card"><div class="stat-title">TOTAL FREI STD.</div><div class="stat-value" style="color:#3b82f6" id="stat-totalfrei">0.0 h</div></div>
+    <div class="stat-card"><div class="stat-title">FEUERWEHR</div><div class="stat-value" style="color:#dc2626" id="stat-feuerwehr">0</div></div>
+    <div class="stat-card"><div class="stat-title">TAGE GROSI</div><div class="stat-value" style="color:#9333ea" id="stat-grosi">0 Tage</div></div>
+    <div class="stat-card"><div class="stat-title">FERIENTAGE</div><div class="stat-value" style="color:#10b981" id="stat-ferien">0 / 46</div></div>
+    <div class="stat-card"><div class="stat-title">SCHULFERIEN TG</div><div class="stat-value" style="color:#d97706" id="stat-schulferien">0 Tage</div></div>
+    <div class="stat-card"><div class="stat-title">FIRMA FREI</div><div class="stat-value" style="color:#64748b" id="stat-firma">0 Tage</div></div>
+  </div>
+
+  <!-- Kalender Tabelle -->
+  <div class="table-container">
+    <table id="planTable">
+      <thead>
+        <tr>
+          <th class="kw-header">2026 / Zeit</th>
+          <th colspan="7" class="kw-header" id="th-kw1">KW 23</th>
+          <th colspan="7" class="kw-header" id="th-kw2">KW 24</th>
+        </tr>
+        <tr class="day-header">
+          <th>Infozeile</th>
+          <th id="day-0">01.06.<br><small>Mo</small></th>
+          <th id="day-1">02.06.<br><small>Di</small></th>
+          <th id="day-2">03.06.<br><small>Mi</small></th>
+          <th id="day-3">04.06.<br><small>Do</small></th>
+          <th id="day-4">05.06.<br><small>Fr</small></th>
+          <th id="day-5">06.06.<br><small>Sa</small></th>
+          <th id="day-6">07.06.<br><small>So</small></th>
+          <th id="day-7">08.06.<br><small>Mo</small></th>
+          <th id="day-8">09.06.<br><small>Di</small></th>
+          <th id="day-9">10.06.<br><small>Mi</small></th>
+          <th id="day-10">11.06.<br><small>Do</small></th>
+          <th id="day-11">12.06.<br><small>Fr</small></th>
+          <th id="day-12">13.06.<br><small>Sa</small></th>
+          <th id="day-13">14.06.<br><small>So</small></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr id="row-t0"><td class="time-col">0.00-8.00</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t1"><td class="time-col">8.00-12.00</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t2"><td class="time-col">12.00-13.30</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t3"><td class="time-col">13.30-14.30</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t4"><td class="time-col">14.30-15.00</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t5"><td class="time-col">15.00-17.00</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t6"><td class="time-col">17.00-18.00</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-t7"><td class="time-col">18.00-24.00</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        
+        <tr id="row-bus1"><td class="time-col" style="background:#fef08a;">Morgen (7.55 Uhr)</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable bg-bus" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-bus2"><td class="time-col" style="background:#fef08a;">Mittag (12.00 Uhr)</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable bg-bus" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-bus3"><td class="time-col" style="background:#e0e7ff;">Nachmittag (15.15)</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-spec"><td class="time-col" style="font-weight:bold;">Besonderes ➔</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-feuerwehr"><td class="time-col" style="background:#fee2e2;">Feuerwehr</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-schicht"><td class="time-col" style="background:#f1f5f9;">Schichtplan</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-ferien"><td class="time-col" style="background:#dcfce7;">Ferien</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable" data-col="${i}"></td>`);</script></tr>
+        <tr id="row-schulferien"><td class="time-col" style="background:#fef3c7;">Schulferien TG</td><script>for(let i=0;i<14;i++)document.write(`<td class="cell-editable bg-schulferien" data-col="${i}"></td>`);</script></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Automatismen & Multi-Select Modal -->
+  <div id="autoModal" class="modal">
+    <div class="modal-content">
+      <h3 style="margin-top:0;">⚡ Automatismen & Mehrfachauswahl</h3>
+      
+      <div style="background:#f8fafc; padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid #e2e8f0;">
+        <strong>👉 Markierte Felder belegen:</strong><br>
+        <span style="font-size:0.8rem; color:#64748b;">Markiere zuerst im Kalender Felder (mit der Maus ziehen oder mit dem Finger antippen) und wähle unten den Wert aus.</span>
+        
+        <label style="font-size:0.8rem; font-weight:bold; display:block; margin-top:8px;">Wert für Markierung:</label>
+        <select id="multiPreset">
+          <option value="">-- Bitte wählen --</option>
+          <option value="Mutter|bg-mutter">Mutter</option>
+          <option value="Vater|bg-vater">Vater / Papi</option>
+          <option value="Schule|bg-schule">Schule</option>
+          <option value="Grosi|bg-grosi">Grosi</option>
+          <option value="Do Frei|bg-dofrei">Do Frei (5.5h)</option>
+          <option value="Mi Frei|bg-mifrei">Mi Frei (2.5h)</option>
+          <option value="Fr kurz|bg-frkurz">Fr kurz (0.5h)</option>
+          <option value="Fr lang|bg-frkurz">Fr lang (3h)</option>
+          <option value="Feuerwehr|bg-feuerwehr">Feuerwehr</option>
+          <option value="|">-- Feld leeren --</option>
+        </select>
+        <button class="btn btn-blue" style="margin-top:6px; width:100%; justify-content:center;" onclick="applyMultiSelection()">Ausgewählte Felder belegen</button>
+      </div>
+
+      <hr style="border:0; border-top:1px solid #e2e8f0; margin:14px 0;">
+
+      <h4 style="margin:0 0 8px 0; font-size:0.9rem;">Wiederkehrende Serien-Regel (z.B. Mi & Fr Papi):</h4>
+      <label style="font-size:0.8rem; font-weight:bold;">Wert:</label>
+      <select id="rulePreset">
+        <option value="Vater|bg-vater">Vater / Papi</option>
+        <option value="Mutter|bg-mutter">Mutter</option>
+        <option value="Grosi|bg-grosi">Grosi</option>
+      </select>
+
+      <label style="font-size:0.8rem; font-weight:bold;">Zeile:</label>
+      <select id="ruleRow">
+        <option value="row-t1">8.00-12.00 Uhr</option>
+        <option value="row-t0">0.00-8.00 Uhr</option>
+        <option value="row-t2">12.00-13.30 Uhr</option>
+        <option value="row-t3">13.30-14.30 Uhr</option>
+        <option value="row-t4">14.30-15.00 Uhr</option>
+        <option value="row-t5">15.00-17.00 Uhr</option>
+        <option value="row-t6">17.00-18.00 Uhr</option>
+        <option value="row-t7">18.00-24.00 Uhr</option>
+        <option value="row-schicht">Schichtplan-Zeile</option>
+      </select>
+
+      <label style="font-size:0.8rem; font-weight:bold;">Wochentage:</label>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; font-size:0.8rem;">
+        <label><input type="checkbox" class="rule-day" value="1"> Mo</label>
+        <label><input type="checkbox" class="rule-day" value="2"> Di</label>
+        <label><input type="checkbox" class="rule-day" value="3"> Mi</label>
+        <label><input type="checkbox" class="rule-day" value="4"> Do</label>
+        <label><input type="checkbox" class="rule-day" value="5"> Fr</label>
+        <label><input type="checkbox" class="rule-day" value="6"> Sa</label>
+        <label><input type="checkbox" class="rule-day" value="0"> So</label>
+      </div>
+
+      <label style="font-size:0.8rem; font-weight:bold;">Rhythmus:</label>
+      <select id="ruleInterval">
+        <option value="1">Jede Woche</option>
+        <option value="2">Jede 2. Woche (14-tägig)</option>
+        <option value="3">Jede 3. Woche</option>
+      </select>
+
+      <label style="font-size:0.8rem; font-weight:bold;">Startdatum:</label>
+      <input type="date" id="ruleStartDate" value="2026-06-01">
+
+      <label style="font-size:0.8rem; font-weight:bold;">Enddatum (optional):</label>
+      <input type="date" id="ruleEndDate">
+
+      <div style="display:flex; justify-content:space-between; margin-top:14px;">
+        <button class="btn btn-dark" onclick="closeModal('autoModal')">Schließen</button>
+        <button class="btn btn-red" onclick="clearAllAutomations()">Alle Regeln löschen</button>
+        <button class="btn btn-purple" onclick="saveAutomationRule()">Regel speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openAutomationModal() {
+      document.getElementById('autoModal').style.display = 'flex';
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    function applyMultiSelection() {
+      const val = document.getElementById('multiPreset').value;
+      const selectedCells = document.querySelectorAll('.cell-editable.selected');
+      
+      if(selectedCells.length === 0) {
+        alert("Bitte markiere zuerst Felder im Kalender (mit der Maus drüber ziehen oder antippen)!");
+        return;
+      }
+
+      const [text, bgClass] = val.split('|');
+
+      selectedCells.forEach(cell => {
+        if(text === undefined || text === "") {
+          cell.innerText = "";
+          cell.className = "cell-editable";
+        } else {
+          cell.innerText = text;
+          cell.className = "cell-editable " + bgClass;
+        }
+        cell.classList.remove('selected');
+      });
+
+      closeModal('autoModal');
+      recalculateStats();
+      saveToFirebase();
+    }
+
+    function saveAutomationRule() {
+      const preset = document.getElementById('rulePreset').value.split('|');
+      const rowId = document.getElementById('ruleRow').value;
+      const interval = document.getElementById('ruleInterval').value;
+      const startDate = document.getElementById('ruleStartDate').value;
+      const endDate = document.getElementById('ruleEndDate').value;
+      
+      const dayCheckboxes = document.querySelectorAll('.rule-day:checked');
+      const days = Array.from(dayCheckboxes).map(cb => parseInt(cb.value));
+
+      if(!startDate || days.length === 0) {
+        alert("Bitte wähle mindestens ein Startdatum und einen Wochentag aus!");
+        return;
+      }
+
+      const ruleId = 'rule_' + Date.now();
+      const newRule = {
+        text: preset[0],
+        bgClass: preset[1],
+        rowId: rowId,
+        days: days,
+        interval: interval,
+        startDate: startDate,
+        endDate: endDate
+      };
+
+      db.ref(getAutomationsPath() + '/' + ruleId).set(newRule).then(() => {
+        alert("Automatismus erfolgreich gespeichert!");
+        closeModal('autoModal');
+        loadWeekData();
+      });
+    }
+
+    function clearAllAutomations() {
+      if(confirm("Möchtest du wirklich alle gespeicherten Automatik-Regeln löschen?")) {
+        db.ref(getAutomationsPath()).remove().then(() => {
+          alert("Alle Regeln wurden gelöscht.");
+          closeModal('autoModal');
+          loadWeekData();
+        });
+      }
+    }
+
+    function recalculateStats() {
+      let totalFrei = 0, feuerwehr = 0, mamiCount = 0, papiCount = 0;
+      let grosiTageSet = new Set();
+
+      const rows = document.querySelectorAll('#planTable tbody tr');
+      
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('.cell-editable');
+        cells.forEach(cell => {
+          const txt = cell.innerText.trim();
+          const colIndex = cell.getAttribute('data-col');
+
+          if(txt === 'Fr kurz') totalFrei += 0.5;
+          if(txt === 'Fr lang') totalFrei += 3.0;
+          if(txt === 'Do Frei') totalFrei += 5.5;
+          if(txt === 'Mi Frei') totalFrei += 2.5;
+          if(txt === 'Feuerwehr') feuerwehr++;
+          
+          if(txt === 'Grosi') {
+            grosiTageSet.add(colIndex);
+          }
+
+          if(txt === 'Mutter') mamiCount++;
+          if(txt === 'Vater') papiCount++;
+        });
+      });
+
+      const totalBetreuung = mamiCount + papiCount;
+      let mamiPct = 0, papiPct = 0;
+      if(totalBetreuung > 0) {
+        mamiPct = (mamiCount / totalBetreuung) * 100;
+        papiPct = (papiCount / totalBetreuung) * 100;
+      }
+
+      document.getElementById('stat-mami-pct').innerText = mamiPct.toFixed(1) + '%';
+      document.getElementById('stat-papi-pct').innerText = papiPct.toFixed(1) + '%';
+      document.getElementById('stat-totalfrei').innerText = totalFrei.toFixed(1) + ' h';
+      document.getElementById('stat-feuerwehr').innerText = feuerwehr;
+      document.getElementById('stat-grosi').innerText = grosiTageSet.size + ' Tage';
+    }
+
+    function exportData() {
+      const data = [];
+      document.querySelectorAll('#planTable tbody tr:not(#row-schulferien)').forEach(row => {
+        row.querySelectorAll('.cell-editable').forEach(c => {
+          data.push({ text: c.innerText, class: c.className });
+        });
+      });
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `familienplaner_jahr_${currentYear}_kw_${currentKW}.json`;
+      a.click();
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = JSON.parse(e.target.result);
+        const cells = document.querySelectorAll('#planTable tbody tr:not(#row-schulferien) .cell-editable');
+        data.forEach((item, index) => {
+          if(cells[index]) {
+            cells[index].innerText = item.text;
+            cells[index].className = item.class || 'cell-editable';
+          }
+        });
+        recalculateStats();
+        saveToFirebase();
+      };
+      reader.readAsText(file);
+    }
+  </script>
+</body>
+</html>
